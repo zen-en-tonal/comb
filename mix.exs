@@ -1,12 +1,14 @@
 defmodule Comb.MixProject do
   use Mix.Project
 
+  @version "0.0.1"
+
   def project do
     [
       app: :comb,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.12",
-      start_permanent: Mix.env() == :prod,
+      name: "Comb",
       deps: deps(),
       dialyzer: [
         flags: [
@@ -26,6 +28,7 @@ defmodule Comb.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      mod: {Comb.Application, []},
       extra_applications: [:logger, :telemetry]
     ]
   end
@@ -33,9 +36,11 @@ defmodule Comb.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:ex_doc, "~> 0.21", only: :dev, runtime: false},
       {:telemetry, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:phoenix_pubsub, "~> 2.0"}
     ]
   end
 end

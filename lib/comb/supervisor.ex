@@ -1,51 +1,33 @@
 defmodule Comb.Supervisor do
-  @moduledoc """
-  Comb の1インスタンスを管理する Supervisor。
-  1テーブル = 1インスタンス。
+  @moduledoc false
 
-  ## 使い方
-
-      children = [
-        {Comb.Supervisor, name: :users_cache, table_name: :users_ets,
-          change_store_mod: MyApp.UserStore,
-          notifier_mod: MyApp.UserNotifier,
-          offload_store_mod: MyApp.Offload}
-      ]
-
-  複数のテーブルを扱う場合は、同様に別名で複数 children を追加すればOK。
-  """
   use Supervisor
 
   def start_link(opts \\ []) do
-    name = Keyword.fetch!(opts, :name)
-    Supervisor.start_link(__MODULE__, opts, name: name)
+    name =
+      opts[:name] ||
+        raise ArgumentError, "the :name option is required when starting Comb"
+
+    sup_name = Module.concat(name, "Supervisor")
+
+    Supervisor.start_link(__MODULE__, opts, name: sup_name)
   end
 
   @impl true
   def init(opts) do
     sup_name = Keyword.fetch!(opts, :name)
 
-    table_opts =
-      Keyword.get(opts, :table_opts, [:ordered_set, :named_table, {:read_concurrency, true}])
-
-    change_store = Keyword.fetch!(opts, :change_store_mod)
-    notifier = Keyword.fetch!(opts, :notifier_mod)
-    offload = Keyword.fetch!(opts, :offload_store_mod)
+    :persistent_term.put({sup_name, :fetch_one}, Keyword.fetch!(opts, :fetch_one))
+    :persistent_term.put({sup_name, :ttl_pos}, Keyword.get(opts, :ttl_pos_ms, 60_000))
+    :persistent_term.put({sup_name, :ttl_neg}, Keyword.get(opts, :ttl_neg_ms, 300_000))
 
     children = [
-      {Registry, keys: :unique, name: :"#{sup_name}_registry"},
-      {Comb.Table, %{name: sup_name, table_opts: table_opts}},
-      {Comb.Offsets, %{name: sup_name}},
-      {Comb.SingleFlight, %{name: sup_name}},
-      {Comb.ExpiryWheel, %{name: sup_name}},
-      {Comb.Sweeper, %{name: sup_name, offload_mod: offload}},
-      {Comb.Applier,
-       %{
-         name: sup_name,
-         change_store_mod: change_store,
-         notifier_mod: notifier
-       }},
-      {Comb.Gap, %{name: sup_name, change_store_mod: change_store}}
+      {Registry, keys: :unique, name: Comb.Registry.reg_name(sup_name)},
+      {Comb.Caching.Table, %{name: sup_name}},
+      {Comb.Caching.SingleFlight, %{name: sup_name}},
+      {Comb.Tiding.ExpiryWheel, %{name: sup_name}},
+      {Comb.Tiding.Sweeper, %{name: sup_name}},
+      {Comb.Refreshing.Applier, %{name: sup_name}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -59,9 +41,5 @@ defmodule Comb.Supervisor do
       restart: :permanent,
       shutdown: 5000
     }
-  end
-
-  def via(name, module) do
-    {:via, Registry, {:"#{name}_registry", module}}
   end
 end
