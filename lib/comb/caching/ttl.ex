@@ -2,7 +2,7 @@ defmodule Comb.Caching.TTL do
   @moduledoc false
 
   alias Comb.Caching.Table
-  alias Comb.Tiding
+  alias Comb.Tidying
 
   @type ttl ::
           {:expire_in, ms :: non_neg_integer()}
@@ -20,7 +20,7 @@ defmodule Comb.Caching.TTL do
 
   def insert(name, {id, v, kind}, {:expire_in, exp}, _) do
     Table.insert(name, {id, v, kind, exp})
-    Tiding.register(name, exp, id)
+    Tidying.register(name, exp, id)
     :ok
   end
 

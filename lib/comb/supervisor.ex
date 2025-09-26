@@ -25,8 +25,8 @@ defmodule Comb.Supervisor do
       {Registry, keys: :unique, name: Comb.Registry.reg_name(sup_name)},
       {Comb.Caching.Table, %{name: sup_name}},
       {Comb.Caching.SingleFlight, %{name: sup_name}},
-      {Comb.Tiding.ExpiryWheel, %{name: sup_name}},
-      {Comb.Tiding.Sweeper, %{name: sup_name}},
+      {Comb.Tidying.ExpiryWheel, %{name: sup_name}},
+      {Comb.Tidying.Sweeper, %{name: sup_name}},
       {Comb.Refreshing.Applier, %{name: sup_name}}
     ]
 

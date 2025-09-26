@@ -1,4 +1,4 @@
-defmodule Comb.Tiding.ExpiryWheel do
+defmodule Comb.Tidying.ExpiryWheel do
   @moduledoc false
 
   use GenServer

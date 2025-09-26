@@ -1,10 +1,10 @@
-defmodule Comb.Tiding.Sweeper do
+defmodule Comb.Tidying.Sweeper do
   @moduledoc false
 
   use GenServer
 
   alias Comb.{Caching, Registry}
-  alias Comb.Tiding.{ExpiryWheel}
+  alias Comb.Tidying.{ExpiryWheel}
 
   def start_link(%{name: name} = opts),
     do: GenServer.start_link(__MODULE__, opts, name: Registry.via(name, __MODULE__))
