@@ -24,8 +24,8 @@ defmodule Comb.Caching do
   @spec delete(name :: atom(), id :: id() | [id()]) :: :ok
   def delete(name, id), do: Table.delete(name, id)
 
-  @spec get(name :: atom(), id()) :: {:ok, term()} | :not_found
-  def get(name, id, now \\ System.system_time(:millisecond)) do
+  @spec get(name :: atom(), id(), timeout()) :: {:ok, term()} | :not_found
+  def get(name, id, timeout \\ 5_000, now \\ System.system_time(:millisecond)) do
     case lookup(name, id) do
       {_, _v, {:val, val}, exp} when not is_expired(exp, now) ->
         {:ok, val}
@@ -34,12 +34,12 @@ defmodule Comb.Caching do
         :not_found
 
       _ ->
-        fetch_and_cache(name, id)
+        fetch_and_cache(name, id, timeout)
     end
   end
 
-  defp fetch_and_cache(name, id) do
-    SingleFlight.run(name, {__MODULE__, :do_fetch}, [name, id])
+  defp fetch_and_cache(name, id, timeout) do
+    SingleFlight.run(name, {__MODULE__, :do_fetch}, [name, id], timeout)
   end
 
   @doc false

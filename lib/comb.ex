@@ -70,8 +70,8 @@ defmodule Comb do
   if the value is not cached or expired, it calls the `fetch_one` function
   given at the startup to get the value, and caches it.
   """
-  @spec get(name :: atom(), id()) :: {:ok, term()} | :not_found
-  def get(name, id), do: Comb.Caching.get(name, id)
+  @spec get(name :: atom(), id(), timeout()) :: {:ok, term()} | :not_found
+  def get(name, id, timeout \\ 5_000), do: Comb.Caching.get(name, id, timeout)
 
   @doc """
   notify that the entry is changed.
