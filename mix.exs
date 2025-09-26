@@ -9,7 +9,11 @@ defmodule Comb.MixProject do
       version: @version,
       elixir: "~> 1.12",
       name: "Comb",
+      description: "Comb is a caching library with versioning and negative caching",
+      homepage_url: "https://github.com/zen-en-tonal/comb",
       deps: deps(),
+      docs: docs(),
+      package: package(),
       dialyzer: [
         flags: [
           "-Wno_unknown",
@@ -43,6 +47,23 @@ defmodule Comb.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:phoenix_pubsub, "~> 2.0"}
+    ]
+  end
+
+  defp docs do
+    [
+      main: "Comb",
+      source_ref: "v#{@version}",
+      source_url: "https://github.com/zen-en-tonal/comb"
+    ]
+  end
+
+  defp package do
+    [
+      maintainers: ["Takeru KODAMA"],
+      licenses: ["MIT"],
+      links: %{github: "https://github.com/zen-en-tonal/comb"},
+      files: ~w(lib test LICENSE mix.exs README.md)
     ]
   end
 end
