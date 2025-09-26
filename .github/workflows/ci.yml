@@ -96,5 +96,8 @@ jobs:
           restore-keys: |
             mix-${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-
 
+      - name: Install dependencies
+        run: mix deps.get --only $MIX_ENV
+
       - name: Run publish
         run: mix hex.publish --yes
