@@ -3,60 +3,90 @@ defmodule Comb.Caching.SingleFlight do
 
   use GenServer
 
-  alias Comb.{Registry}
+  alias Comb.Registry
 
   def start_link(%{name: name} = opts),
     do: GenServer.start_link(__MODULE__, opts, name: Registry.via(name, __MODULE__))
 
-  def init(state) do
+  def init(%{name: name} = state) do
+    {:ok, _pid} = :pg.start_link(scope_for(name))
+
     {:ok, state}
   end
 
-  def run(name, arg, fun, timeout \\ 5_000) do
-    ref = make_ref()
+  @spec run(name :: atom(), fun :: function() | {module(), fun_name :: atom()}, args :: [term()]) ::
+          {:ok, term()} | {:error, term()}
+  def run(name, fun, args, timeout \\ 5_000)
 
+  def run(name, fun, args, timeout) when is_function(fun) do
+    group = group_for(fun, args)
+    closure = fn -> apply(fun, args) end
+
+    do_run(name, group, closure, timeout)
+  end
+
+  def run(name, {module, fun_name}, args, timeout)
+      when is_atom(module) and is_atom(fun_name) do
+    group = group_for({module, fun_name}, args)
+    closure = fn -> apply(module, fun_name, args) end
+
+    do_run(name, group, closure, timeout)
+  end
+
+  defp do_run(name, group, closure, timeout) do
     Registry.via(name, __MODULE__)
-    |> GenServer.call({:run, arg, ref, self(), fun}, timeout)
+    |> GenServer.call({:run, group, closure, self()}, timeout)
 
     receive do
-      {^ref, result} -> result
+      {:done, ^group, result} ->
+        :pg.leave(scope_for(name), group, self())
+        result
+    after
+      timeout ->
+        :pg.leave(scope_for(name), group, self())
+        {:error, :timeout}
     end
   end
 
-  def handle_call({:run, arg, ref, caller, fun}, _from, state) do
-    case Map.get(state, {fun, arg}) do
-      nil ->
+  def handle_call({:run, group, closure, caller}, _from, %{name: name} = state) do
+    :ok = :pg.join(scope_for(name), group, caller)
+
+    case :pg.get_members(scope_for(name), group) do
+      [^caller] ->
         parent = self()
 
-        pid =
-          spawn_link(fn ->
-            res = safe(fun, arg)
-            GenServer.cast(parent, {:complete, fun, arg, res})
+        _pid =
+          spawn(fn ->
+            res = safe(closure)
+            GenServer.cast(parent, {:complete, group, res})
           end)
 
-        {:reply, :ok, Map.put(state, {fun, arg}, %{waiters: [{ref, caller}], pid: pid})}
+        {:reply, :ok, state}
 
-      %{waiters: waiters} = entry ->
-        {:reply, :ok, Map.put(state, {fun, arg}, %{entry | waiters: [{ref, caller} | waiters]})}
+      _already_in_flight ->
+        {:reply, :ok, state}
     end
   end
 
-  def handle_cast({:complete, fun, arg, res}, state) do
-    case Map.pop(state, {fun, arg}) do
-      {nil, st} ->
-        {:noreply, st}
+  def handle_cast({:complete, group, res}, state) do
+    publish(scope_for(state.name), group, {:done, group, res})
 
-      {%{waiters: waiters}, st} ->
-        Enum.each(waiters, fn {ref, pid} -> send(pid, {ref, res}) end)
-        {:noreply, st}
-    end
+    {:noreply, state}
   end
 
-  defp safe(fun, arg) do
+  defp group_for(fun, arg), do: {fun, arg}
+
+  defp scope_for(name), do: Module.concat(name, "PG")
+
+  defp publish(scope, group, msg) do
+    for pid <- :pg.get_members(scope, group), do: send(pid, msg)
+  end
+
+  defp safe(closure) do
     try do
-      fun.(arg)
+      closure.()
     catch
-      c, r -> {:error, {c, r}}
+      kind, reason -> {:error, {kind, reason}}
     end
   end
 end

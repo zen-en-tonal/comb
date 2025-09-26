@@ -29,7 +29,9 @@ defmodule Comb do
   @type id :: term()
   @type version :: non_neg_integer()
   @type value :: {:val, term()} | :tomb
-  @type fetch_one :: (id() -> {:ok, {version(), term()} | nil} | {:error, term()})
+  @type fetch_one ::
+          (id() -> {:ok, {version(), term()} | nil} | {:error, term()})
+          | {module(), fun_name :: atom()}
 
   @type option ::
           {:name, atom()}

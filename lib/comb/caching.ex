@@ -7,9 +7,7 @@ defmodule Comb.Caching do
   @type version :: non_neg_integer()
   @type value :: {:val, term()} | :tomb
   @type ttl :: TTL.ttl()
-  @type fetch_one :: (id() ->
-                        {:ok, {version :: non_neg_integer(), value :: term()} | nil}
-                        | {:error, term()})
+  @type fetch_one :: {module(), fun_name :: atom()} | function()
 
   defguard is_expired(exp, now)
            when exp != :infinity and now > exp
@@ -41,15 +39,20 @@ defmodule Comb.Caching do
   end
 
   defp fetch_and_cache(name, id) do
-    SingleFlight.run(name, {name, id}, fn {name, id} -> do_fetch(name, id) end)
+    SingleFlight.run(name, {__MODULE__, :do_fetch}, [name, id])
   end
 
-  defp do_fetch(name, id) do
-    fetch_one = :persistent_term.get({name, :fetch_one})
+  @doc false
+  def do_fetch(name, id) do
     ttl_pos = :persistent_term.get({name, :ttl_pos})
     ttl_neg = :persistent_term.get({name, :ttl_neg})
 
-    case fetch_one.(id) do
+    :persistent_term.get({name, :fetch_one})
+    |> case do
+      {mod, fun} -> apply(mod, fun, [id])
+      closure -> apply(closure, [id])
+    end
+    |> case do
       {:ok, {v, value}} ->
         put(name, id, {v, {:val, value}}, {:ttl, ttl_pos})
         {:ok, value}
