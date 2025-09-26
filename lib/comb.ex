@@ -60,6 +60,9 @@ defmodule Comb do
   @spec start_link([option()]) :: Supervisor.on_start()
   def start_link(opts), do: Comb.Supervisor.start_link(opts)
 
+  @spec child_spec([option()]) :: Supervisor.child_spec()
+  def child_spec(opts), do: Comb.Supervisor.child_spec(opts)
+
   @doc """
   get the cached value on `name` by `id`.
   returns `{:ok, value}` or `:not_found`.
