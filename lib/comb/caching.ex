@@ -24,14 +24,14 @@ defmodule Comb.Caching do
   @spec delete(name :: atom(), id :: id() | [id()]) :: :ok
   def delete(name, id), do: Table.delete(name, id)
 
-  @spec get(name :: atom(), id(), timeout()) :: {:ok, term()} | :not_found
-  def get(name, id, timeout \\ 5_000, now \\ System.system_time(:millisecond)) do
+  @spec fetch(name :: atom(), id(), timeout()) :: {:ok, term()} | {:error, term() | :not_found}
+  def fetch(name, id, timeout \\ 5_000, now \\ System.system_time(:millisecond)) do
     case lookup(name, id) do
       {_, _v, {:val, val}, exp} when not is_expired(exp, now) ->
         {:ok, val}
 
       {_, _v, :tomb, exp} when not is_expired(exp, now) ->
-        :not_found
+        {:error, :not_found}
 
       _ ->
         fetch_and_cache(name, id, timeout)
@@ -59,10 +59,10 @@ defmodule Comb.Caching do
 
       {:ok, nil} ->
         put(name, id, {0, :tomb}, {:ttl, ttl_neg})
-        :not_found
+        {:error, :not_found}
 
-      {:error, _} ->
-        :not_found
+      {:error, _} = err ->
+        err
     end
   end
 

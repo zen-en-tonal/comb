@@ -18,9 +18,9 @@ defmodule Comb do
       %{1 => {1, "value1"}, 2 => {1, "value2"}}
       iex> {:ok, _pid} = Comb.start_link(name: MyApp.Cache, fetch_one: fn id -> {:ok, db[id]} end)
       iex> Comb.get(MyApp.Cache, 1)
-      {:ok, "value1"}
-      iex> Comb.get(MyApp.Cache, 3)
-      :not_found
+      "value1"
+      iex> Comb.fetch(MyApp.Cache, 3)
+      {:error, :not_found}
       iex> Comb.notify_changed(MyApp.Cache, {3, 1, "value3"})
       :ok
 
@@ -65,13 +65,49 @@ defmodule Comb do
 
   @doc """
   get the cached value on `name` by `id`.
-  returns `{:ok, value}` or `:not_found`.
 
-  if the value is not cached or expired, it calls the `fetch_one` function
-  given at the startup to get the value, and caches it.
+  if the entry is not found, return `default` (default: `nil`).
+  if the entry is expired, it will try to fetch it again.
+
+  the `timeout` is the maximum time to wait for fetching the entry, in milliseconds (default: 5_000).
   """
-  @spec get(name :: atom(), id(), timeout()) :: {:ok, term()} | :not_found
-  def get(name, id, timeout \\ 5_000), do: Comb.Caching.get(name, id, timeout)
+  @spec get(name :: atom(), id(), default :: term(), timeout()) :: term() | nil
+  def get(name, id, default \\ nil, timeout \\ 5_000, now \\ System.system_time(:millisecond)) do
+    case Comb.Caching.fetch(name, id, timeout, now) do
+      {:ok, val} -> val
+      {:error, _} -> default
+    end
+  end
+
+  @doc """
+  fetch the cached value on `name` by `id`.
+
+  if the entry is not found, return `{:error, :not_found}`.
+  if the entry is expired, it will try to fetch it again.
+
+  the `timeout` is the maximum time to wait for fetching the entry, in milliseconds (default: 5_000).
+  """
+
+  @spec fetch(name :: atom(), id(), timeout()) :: {:ok, term()} | {:error, term()}
+  def fetch(name, id, timeout \\ 5_000, now \\ System.system_time(:millisecond)) do
+    Comb.Caching.fetch(name, id, timeout, now)
+  end
+
+  @doc """
+  fetch the cached value on `name` by `id`.
+
+  if the entry is not found, raise `KeyError`.
+  if the entry is expired, it will try to fetch it again.
+
+  the `timeout` is the maximum time to wait for fetching the entry, in milliseconds (default: 5_000).
+  """
+  @spec fetch!(name :: atom(), id(), timeout()) :: term()
+  def fetch!(name, id, timeout \\ 5_000, now \\ System.system_time(:millisecond)) do
+    case Comb.Caching.fetch(name, id, timeout, now) do
+      {:ok, val} -> {:ok, val}
+      {:error, reason} -> raise KeyError, key: id, message: reason
+    end
+  end
 
   @doc """
   notify that the entry is changed.

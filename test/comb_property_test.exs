@@ -40,7 +40,7 @@ defmodule Comb.StateM do
   @impl true
   def command(state) do
     frequency([
-      {1, {:call, Comb, :get, [state.name, ids()]}},
+      {1, {:call, Comb, :fetch, [state.name, ids()]}},
       {1, {:call, Comb, :notify_changed, [state.name, {ids(), pos_integer(), term()}]}}
     ])
   end
@@ -48,22 +48,24 @@ defmodule Comb.StateM do
   defp ids, do: T.choose(1, 10)
 
   @impl true
-  def precondition(_state, {:call, Comb, :get, [_name, _id]}), do: true
+  def precondition(_state, {:call, Comb, :fetch, [_name, _id]}), do: true
   def precondition(_state, {:call, Comb, :notify_changed, [_name, _entry]}), do: true
 
   @impl true
-  def postcondition(state, {:call, Comb, :get, [_name, id]}, res) do
+  def postcondition(state, {:call, Comb, :fetch, [_name, id]}, res) do
     {state.db[id], res}
     |> case do
-      {nil, :not_found} -> true
+      {nil, {:error, :not_found}} -> true
       {{_v, s_value}, {:ok, c_value}} -> s_value == c_value
       _ -> false
     end
   end
 
   def postcondition(state, {:call, Comb, :notify_changed, [name, {id, version, value}]}, _res) do
+    # wait a bit for Comb to process notify_changed
     :timer.sleep(5)
-    {state.db[id], Comb.get(name, id)}
+
+    {state.db[id], Comb.fetch(name, id)}
     |> case do
       # new value should be ok
       {nil, {:ok, ^value}} -> true
@@ -76,7 +78,7 @@ defmodule Comb.StateM do
   end
 
   @impl true
-  def next_state(state, _res, {:call, Comb, :get, [_name, _id]}), do: state
+  def next_state(state, _res, {:call, Comb, :fetch, [_name, _id]}), do: state
   def next_state(state, _res, {:call, Comb, :notify_changed, [_name, {id, version, value}]}) do
     case state.db[id] do
       nil -> Map.update!(state, :db, fn db -> Map.put(db, id, {version, value}) end)
@@ -93,6 +95,8 @@ end
 defmodule Comb.PropertyTest do
   use ExUnit.Case, async: true
   use PropCheck
+
+  doctest Comb
 
   alias PropCheck.StateM
 
