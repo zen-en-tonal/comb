@@ -24,6 +24,7 @@ defmodule Comb.Supervisor do
     children = [
       {Registry, keys: :unique, name: Comb.Registry.reg_name(sup_name)},
       {Comb.Caching.Table, %{name: sup_name}},
+      {Task.Supervisor, name: Module.concat(sup_name, TaskSup)},
       {Comb.Caching.SingleFlight, %{name: sup_name}},
       {Comb.Tidying.ExpiryWheel, %{name: sup_name}},
       {Comb.Tidying.Sweeper, %{name: sup_name}},

@@ -9,23 +9,18 @@ defmodule Comb.Caching.SingleFlight do
     do: GenServer.start_link(__MODULE__, opts, name: Registry.via(name, __MODULE__))
 
   def init(%{name: name} = state) do
-    {:ok, _pid} = :pg.start_link(scope_for(name))
+    case :pg.start_link(scope_for(name)) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+      other -> raise "Failed to start pg: #{inspect(other)}"
+    end
 
     {:ok, state}
   end
 
-  @spec run(name :: atom(), fun :: function() | {module(), fun_name :: atom()}, args :: [term()]) ::
-          {:ok, term()} | {:error, term()}
-  def run(name, fun, args, timeout \\ 5_000)
-
-  def run(name, fun, args, timeout) when is_function(fun) do
-    group = group_for(fun, args)
-    closure = fn -> apply(fun, args) end
-
-    do_run(name, group, closure, timeout)
-  end
-
-  def run(name, {module, fun_name}, args, timeout)
+  @spec run(name :: atom(), {module(), fun_name :: atom(), args :: [term()]}) ::
+          term() | {:error, term()}
+  def run(name, {module, fun_name, args}, timeout \\ 5_000)
       when is_atom(module) and is_atom(fun_name) do
     group = group_for({module, fun_name}, args)
     closure = fn -> apply(module, fun_name, args) end
@@ -35,7 +30,7 @@ defmodule Comb.Caching.SingleFlight do
 
   defp do_run(name, group, closure, timeout) do
     Registry.via(name, __MODULE__)
-    |> GenServer.call({:run, group, closure, self()}, timeout)
+    |> GenServer.call({:flight, group, closure, self()})
 
     receive do
       {:done, ^group, result} ->
@@ -48,30 +43,22 @@ defmodule Comb.Caching.SingleFlight do
     end
   end
 
-  def handle_call({:run, group, closure, caller}, _from, %{name: name} = state) do
-    :ok = :pg.join(scope_for(name), group, caller)
+  def handle_call({:flight, group, closure, caller}, _from, %{name: name} = state) do
+    scope = scope_for(name)
+    :ok = :pg.join(scope, group, caller)
 
-    case :pg.get_members(scope_for(name), group) do
-      [^caller] ->
-        parent = self()
+    members = :pg.get_members(scope, group)
+    leader = Enum.min(members)
 
-        _pid =
-          spawn(fn ->
-            res = safe(closure)
-            GenServer.cast(parent, {:complete, group, res})
-          end)
-
-        {:reply, :ok, state}
-
-      _already_in_flight ->
-        {:reply, :ok, state}
+    if leader == caller do
+      Module.concat(name, TaskSup)
+      |> Task.Supervisor.start_child(fn ->
+        res = safe(closure)
+        publish(scope, group, {:done, group, res})
+      end)
     end
-  end
 
-  def handle_cast({:complete, group, res}, state) do
-    publish(scope_for(state.name), group, {:done, group, res})
-
-    {:noreply, state}
+    {:reply, :ok, state}
   end
 
   defp group_for(fun, arg), do: {fun, arg}

@@ -39,7 +39,7 @@ defmodule Comb.Caching do
   end
 
   defp fetch_and_cache(name, id, timeout) do
-    SingleFlight.run(name, {__MODULE__, :do_fetch}, [name, id], timeout)
+    SingleFlight.run(name, {__MODULE__, :do_fetch, [name, id]}, timeout)
   end
 
   @doc false
