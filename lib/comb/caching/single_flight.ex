@@ -8,6 +8,7 @@ defmodule Comb.Caching.SingleFlight do
   def start_link(%{name: name} = opts),
     do: GenServer.start_link(__MODULE__, opts, name: Registry.via(name, __MODULE__))
 
+  @impl true
   def init(%{name: name} = state) do
     case :pg.start_link(scope_for(name)) do
       {:ok, _} -> :ok
@@ -30,7 +31,7 @@ defmodule Comb.Caching.SingleFlight do
 
   defp do_run(name, group, closure, timeout) do
     Registry.via(name, __MODULE__)
-    |> GenServer.call({:flight, group, closure, self()})
+    |> GenServer.cast({:flight, group, closure, self()})
 
     receive do
       {:done, ^group, result} ->
@@ -43,12 +44,14 @@ defmodule Comb.Caching.SingleFlight do
     end
   end
 
-  def handle_call({:flight, group, closure, caller}, _from, %{name: name} = state) do
+  @impl true
+  def handle_cast({:flight, group, closure, caller}, %{name: name} = state) do
     scope = scope_for(name)
     :ok = :pg.join(scope, group, caller)
 
-    members = :pg.get_members(scope, group)
-    leader = Enum.min(members)
+    leader =
+      :pg.get_members(scope, group)
+      |> Enum.min(fn -> nil end)
 
     if leader == caller do
       Module.concat(name, TaskSup)
@@ -58,7 +61,7 @@ defmodule Comb.Caching.SingleFlight do
       end)
     end
 
-    {:reply, :ok, state}
+    {:noreply, state}
   end
 
   defp group_for(fun, arg), do: {fun, arg}
